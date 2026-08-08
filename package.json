@@ -1,0 +1,15 @@
+{
+  "name": "ox-broker-api",
+  "version": "1.0.0",
+  "description": "OX BROKER Demo Trading API — Simulated OTC market data with real-time OHLC candle simulation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["otc", "broker", "demo", "trading", "api"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}
