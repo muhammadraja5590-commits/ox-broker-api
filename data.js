@@ -8,7 +8,7 @@ const MARKETS = [
   { symbol: 'USDBRL-OTC', name: 'USD/BRL OTC', basePrice: 5.1234,  spread: 0.00020, volatility: 0.00030 },
   { symbol: 'USDNGN-OTC', name: 'USD/NGN OTC', basePrice: 1450.5,  spread: 0.05000, volatility: 0.08000 },
   { symbol: 'EURNZD-OTC', name: 'EUR/NZD OTC', basePrice: 1.7823,  spread: 0.00006, volatility: 0.00008 },
-  { symbol: 'NZDJPY-OTC', name: 'NZD/JPY OTC', basePrice: 91.45,   spread: 0.01000, volatility: 0.01500 },
+  { symbol: 'NZDJPY-OTC', name: 'NZD/JPY OTC', basePrice: 93.618,  spread: 0.01000, volatility: 0.01500 },
   { symbol: 'AUDNGN-OTC', name: 'AUD/NGN OTC', basePrice: 960.25,  spread: 0.04000, volatility: 0.06000 },
   { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 288.913, spread: 0.05000, volatility: 0.08000 },
 ];
