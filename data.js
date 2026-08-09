@@ -10,6 +10,7 @@ const MARKETS = [
   { symbol: 'EURNZD-OTC', name: 'EUR/NZD OTC', basePrice: 1.7823,  spread: 0.00006, volatility: 0.00008 },
   { symbol: 'NZDJPY-OTC', name: 'NZD/JPY OTC', basePrice: 91.45,   spread: 0.01000, volatility: 0.01500 },
   { symbol: 'AUDNGN-OTC', name: 'AUD/NGN OTC', basePrice: 960.25,  spread: 0.04000, volatility: 0.06000 },
+  { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 288.913, spread: 0.05000, volatility: 0.08000 },
 ];
 
 const candles = {};
@@ -20,7 +21,7 @@ const candleOpenTime = {};
 function roundToMinute(ts) { return Math.floor(ts / 60000) * 60000; }
 function fmtPrice(price, decimals) { return parseFloat(price.toFixed(decimals)); }
 function getDecimals(price) {
-  if (price >= 100) return 2;
+  if (price >= 100) return 3;
   if (price >= 10) return 4;
   return 5;
 }
