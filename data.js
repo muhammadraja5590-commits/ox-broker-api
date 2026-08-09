@@ -9,7 +9,7 @@ const EventEmitter = require('events');
 // ==================== MARKET CONFIG ====================
 
 const MARKETS = [
-  { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 288.84,  highPrice: 600.0, lowPrice: 100.0,   spread: 0.0500, volatility: 0.0800 },
+  { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 279.52,  highPrice: 290.0, lowPrice: 270.0,    spread: 0.0005, volatility: 0.0300 },
   { symbol: 'GBPNZD-OTC', name: 'GBP/NZD OTC', basePrice: 1.8715,  highPrice: 1.9000, lowPrice: 1.8400,   spread: 0.00008, volatility: 0.00006 },
   { symbol: 'USDMXN-OTC', name: 'USD/MXN OTC', basePrice: 18.4205, highPrice: 18.8000, lowPrice: 18.0000, spread: 0.0005,  volatility: 0.0006 },
   { symbol: 'NZDCHF-OTC', name: 'NZD/CHF OTC', basePrice: 0.53421, highPrice: 0.5500, lowPrice: 0.5200,   spread: 0.00003, volatility: 0.00004 },
@@ -65,16 +65,13 @@ class PriceEngine extends EventEmitter {
       const old = this.prices[s];
       const d = getDecimals(m.basePrice);
 
-      // Smooth movement: momentum wave + small noise
       const wave = Math.sin(this.tickCount[s] * 0.018) * m.volatility * 0.35;
       const noise = (Math.random() - 0.5) * 2 * m.volatility * 0.45;
       let next = fmtPrice(old + wave + noise, d);
 
-      // RULE: Price must stay within highPrice/lowPrice range
       if (next > m.highPrice) next = fmtPrice(m.highPrice - m.volatility, d);
       if (next < m.lowPrice)  next = fmtPrice(m.lowPrice + m.volatility, d);
 
-      // Direction
       this.prevPrices[s] = old;
       if (next > old) this.direction[s] = 1;
       else if (next < old) this.direction[s] = -1;
@@ -84,7 +81,6 @@ class PriceEngine extends EventEmitter {
       this.tickCount[s]++;
     });
 
-    // Emit tick event for candle engine + WebSocket
     this.emit('tick', this.getAllPrices(), this.direction);
   }
 }
@@ -95,11 +91,8 @@ class CandleEngine extends EventEmitter {
   constructor(markets) {
     super();
     this.markets = markets;
-    // { '5s': 5000, '10s': 10000, '30s': 30000, '1m': 60000 }
     this.timeframes = { '5s': 5000, '10s': 10000, '30s': 30000, '1m': 60000 };
-    // candles[symbol][timeframe] = [{time,open,high,low,close}, ...]
     this.history = {};
-    // current[symbol][timeframe] = {time,open,high,low,close}
     this.current = {};
   }
 
@@ -116,7 +109,6 @@ class CandleEngine extends EventEmitter {
         const arr = [];
         let p = priceEngine.getPrice(s);
 
-        // Generate 100 historical candles per timeframe
         for (let i = 100; i >= 1; i--) {
           const t = bucket - i * ms;
           const o = p;
@@ -129,7 +121,6 @@ class CandleEngine extends EventEmitter {
         }
         this.history[s][tf] = arr;
 
-        // Current (in-progress) candle
         this.current[s][tf] = {
           time: bucket,
           open: fmtPrice(p, d),
@@ -142,7 +133,6 @@ class CandleEngine extends EventEmitter {
     console.log('[CandleEngine] Initialized with timeframes:', Object.keys(this.timeframes).join(', '));
   }
 
-  // Called every tick with latest prices
   feedTick(prices, direction) {
     const now = Date.now();
     const closedCandles = [];
@@ -151,14 +141,12 @@ class CandleEngine extends EventEmitter {
       const s = m.symbol;
       const price = prices[s];
       if (price === undefined) return;
-      const d = getDecimals(m.basePrice);
 
       Object.entries(this.timeframes).forEach(([tf, ms]) => {
         const bucket = Math.floor(now / ms) * ms;
         const cur = this.current[s][tf];
 
         if (bucket > cur.time) {
-          // Timeframe complete → close current candle
           const closed = {
             time: cur.time,
             open: cur.open,
@@ -171,7 +159,6 @@ class CandleEngine extends EventEmitter {
 
           closedCandles.push({ symbol: s, timeframe: tf, candle: closed });
 
-          // Start new candle
           this.current[s][tf] = {
             time: bucket,
             open: price,
@@ -180,7 +167,6 @@ class CandleEngine extends EventEmitter {
             close: price,
           };
         } else {
-          // Same bucket → update OHLC
           if (price > cur.high) cur.high = price;
           if (price < cur.low) cur.low = price;
           cur.close = price;
@@ -188,7 +174,6 @@ class CandleEngine extends EventEmitter {
       });
     });
 
-    // Emit closed candles event
     if (closedCandles.length > 0) {
       this.emit('candles-closed', closedCandles);
     }
@@ -198,7 +183,6 @@ class CandleEngine extends EventEmitter {
     const tf = timeframe || '1m';
     if (!this.history[symbol] || !this.history[symbol][tf]) return [];
     const arr = this.history[symbol][tf].slice(-limit);
-    // Append current candle as rightmost
     const live = this.current[symbol] && this.current[symbol][tf];
     if (live && (arr.length === 0 || arr[arr.length - 1].time !== live.time)) {
       arr.push(live);
@@ -225,7 +209,6 @@ const candleEngine = new CandleEngine(MARKETS);
 priceEngine.init();
 candleEngine.init(priceEngine);
 
-// Tick every 1 second: Price Engine → Candle Engine
 setInterval(() => {
   priceEngine.tick();
   candleEngine.feedTick(priceEngine.getAllPrices(), priceEngine.direction);
