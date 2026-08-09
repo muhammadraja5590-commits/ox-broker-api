@@ -1,10 +1,12 @@
-// OX BROKER — Centralized Price Engine + Candle Engine
+// OX BROKER — 3-Layer Live Market System
+// Layer 1: Price Engine  → 1-second ticks
+// Layer 2: Candle Engine → 5s/10s/30s/1m OHLC from same ticks
+// Layer 3: API + WebSocket → broadcast
 // SIMULATED OTC DEMO DATA ONLY — Not real financial market data.
-// Architecture: MARKET CONFIG → PRICE ENGINE → TICK ENGINE → CANDLE ENGINE → API/WS
 
 const EventEmitter = require('events');
 
-// ============ MARKET CONFIG ============
+// ==================== MARKET CONFIG ====================
 
 const MARKETS = [
   { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 288.84,  highPrice: 600.0, lowPrice: 100.0,   spread: 0.0500, volatility: 0.0800 },
@@ -18,184 +20,10 @@ const MARKETS = [
   { symbol: 'AUDNGN-OTC', name: 'AUD/NGN OTC', basePrice: 960.25,  highPrice: 980.0, lowPrice: 940.0,      spread: 0.04,    volatility: 0.06 },
 ];
 
-// ============ PRICE ENGINE ============
-
-class PriceEngine {
-  constructor(markets) {
-    this.markets = markets;
-    this.prices = {};       // { symbol: currentPrice }
-    this.prevPrices = {};   // previous tick to compute direction
-    this.direction = {};    // 1 = up, -1 = down, 0 = flat
-    this.ticks = {};        // total ticks since start
-    this.initialized = false;
-  }
-
-  init() {
-    this.markets.forEach((m) => {
-      const decimals = getDecimals(m.basePrice);
-      const p = fmtPrice(m.basePrice, decimals);
-      this.prices[m.symbol] = p;
-      this.prevPrices[m.symbol] = p;
-      this.direction[m.symbol] = 0;
-      this.ticks[m.symbol] = 0;
-    });
-    this.initialized = true;
-    console.log('[PriceEngine] Initialized', Object.keys(this.prices).length, 'markets');
-  }
-
-  getPrice(symbol) {
-    return this.prices[symbol] || null;
-  }
-
-  getAllPrices() {
-    return { ...this.prices };
-  }
-
-  tick() {
-    if (!this.initialized) return;
-
-    this.markets.forEach((m) => {
-      const sym = m.symbol;
-      const oldPrice = this.prices[sym];
-      const decimals = getDecimals(m.basePrice);
-
-      // Compute tick movement
-      const momentum = Math.sin(this.ticks[sym] * 0.02) * m.volatility * 0.3;
-      const noise = (Math.random() - 0.5) * 2 * m.volatility;
-      const change = momentum + noise;
-      let newPrice = fmtPrice(oldPrice + change, decimals);
-
-      // Clamp to highPrice / lowPrice range
-      if (newPrice > m.highPrice) newPrice = fmtPrice(m.highPrice - m.volatility, decimals);
-      if (newPrice < m.lowPrice) newPrice = fmtPrice(m.lowPrice + m.volatility, decimals);
-
-      // Track direction
-      this.prevPrices[sym] = oldPrice;
-      if (newPrice > oldPrice) this.direction[sym] = 1;
-      else if (newPrice < oldPrice) this.direction[sym] = -1;
-      else this.direction[sym] = 0;
-
-      this.prices[sym] = newPrice;
-      this.ticks[sym]++;
-    });
-  }
-}
-
-// ============ CANDLE ENGINE ============
-
-class CandleEngine {
-  constructor(markets) {
-    this.markets = markets;
-    // candles[symbol] = { '5s': [...], '10s': [...], '30s': [...], '1m': [...] }
-    this.candles = {};
-    this.current = {};   // current in-progress candles per symbol per timeframe
-    this.windows = {
-      '5s':  5000,
-      '10s': 10000,
-      '30s': 30000,
-      '1m':  60000,
-    };
-    this.initialized = false;
-  }
-
-  init(priceEngine) {
-    this.markets.forEach((m) => {
-      const sym = m.symbol;
-      const decimals = getDecimals(m.basePrice);
-      const price = priceEngine.getPrice(sym);
-
-      this.candles[sym] = {};
-      this.current[sym] = {};
-
-      Object.entries(this.windows).forEach(([tf, ms]) => {
-        const now = Date.now();
-        const bucketTime = Math.floor(now / ms) * ms;
-
-        // Generate 100 historical candles
-        const arr = [];
-        let p = price;
-        for (let i = 100; i >= 0; i--) {
-          const t = bucketTime - i * ms;
-          const o = p;
-          const ch = (Math.random() - 0.5) * 2 * m.volatility;
-          const c = fmtPrice(o + ch, decimals);
-          const hi = fmtPrice(Math.max(o, c) + Math.random() * m.volatility * 0.3, decimals);
-          const lo = fmtPrice(Math.min(o, c) - Math.random() * m.volatility * 0.3, decimals);
-          arr.push({ time: t, open: fmtPrice(o, decimals), high: hi, low: lo, close: c });
-          p = c;
-        }
-        this.candles[sym][tf] = arr;
-
-        this.current[sym][tf] = {
-          time: bucketTime,
-          open: price,
-          high: price,
-          low: price,
-          close: price,
-        };
-      });
-    });
-    this.initialized = true;
-    console.log('[CandleEngine] Initialized with timeframes:', Object.keys(this.windows).join(', '));
-  }
-
-  feedTick(symbol, price) {
-    if (!this.initialized) return;
-    const now = Date.now();
-    const decimals = getDecimals(price);
-
-    Object.entries(this.windows).forEach(([tf, ms]) => {
-      const bucketTime = Math.floor(now / ms) * ms;
-      const cur = this.current[symbol][tf];
-
-      if (bucketTime > cur.time) {
-        // Close current candle, start new one
-        this.candles[symbol][tf].push({
-          time: cur.time,
-          open: cur.open,
-          high: cur.high,
-          low: cur.low,
-          close: cur.close,
-        });
-        if (this.candles[symbol][tf].length > 500) {
-          this.candles[symbol][tf].shift();
-        }
-        this.current[symbol][tf] = {
-          time: bucketTime,
-          open: price,
-          high: price,
-          low: price,
-          close: price,
-        };
-      } else {
-        // Update current candle
-        if (price > cur.high) cur.high = price;
-        if (price < cur.low) cur.low = price;
-        cur.close = price;
-      }
-    });
-  }
-
-  getCandles(symbol, timeframe, limit = 100) {
-    if (!this.initialized || !this.candles[symbol]) return [];
-    const tf = timeframe || '1m';
-    const arr = (this.candles[symbol][tf] || []).slice(-limit);
-    const live = this.current[symbol] && this.current[symbol][tf];
-    if (live && (arr.length === 0 || arr[arr.length - 1].time !== live.time)) {
-      arr.push(live);
-    }
-    return arr;
-  }
-
-  getCurrentCandle(symbol, timeframe = '1m') {
-    return this.current[symbol] ? this.current[symbol][timeframe] : null;
-  }
-}
-
-// ============ Helpers ============
+// ==================== HELPERS ====================
 
 function fmtPrice(val, decimals) {
-  return parseFloat(val.toFixed(decimals || 5));
+  return parseFloat(val.toFixed(decimals));
 }
 
 function getDecimals(price) {
@@ -204,7 +32,192 @@ function getDecimals(price) {
   return 5;
 }
 
-// ============ Initialize & Wire Up ============
+// ==================== PRICE ENGINE (Layer 1) ====================
+
+class PriceEngine extends EventEmitter {
+  constructor(markets) {
+    super();
+    this.markets = markets;
+    this.prices = {};
+    this.prevPrices = {};
+    this.direction = {};
+    this.tickCount = {};
+  }
+
+  init() {
+    this.markets.forEach((m) => {
+      const d = getDecimals(m.basePrice);
+      const p = fmtPrice(m.basePrice, d);
+      this.prices[m.symbol] = p;
+      this.prevPrices[m.symbol] = p;
+      this.direction[m.symbol] = 0;
+      this.tickCount[m.symbol] = 0;
+    });
+    console.log('[PriceEngine] Initialized', this.markets.length, 'markets');
+  }
+
+  getPrice(symbol) { return this.prices[symbol]; }
+  getAllPrices() { return { ...this.prices }; }
+
+  tick() {
+    this.markets.forEach((m) => {
+      const s = m.symbol;
+      const old = this.prices[s];
+      const d = getDecimals(m.basePrice);
+
+      // Smooth movement: momentum wave + small noise
+      const wave = Math.sin(this.tickCount[s] * 0.018) * m.volatility * 0.35;
+      const noise = (Math.random() - 0.5) * 2 * m.volatility * 0.45;
+      let next = fmtPrice(old + wave + noise, d);
+
+      // RULE: Price must stay within highPrice/lowPrice range
+      if (next > m.highPrice) next = fmtPrice(m.highPrice - m.volatility, d);
+      if (next < m.lowPrice)  next = fmtPrice(m.lowPrice + m.volatility, d);
+
+      // Direction
+      this.prevPrices[s] = old;
+      if (next > old) this.direction[s] = 1;
+      else if (next < old) this.direction[s] = -1;
+      else this.direction[s] = 0;
+
+      this.prices[s] = next;
+      this.tickCount[s]++;
+    });
+
+    // Emit tick event for candle engine + WebSocket
+    this.emit('tick', this.getAllPrices(), this.direction);
+  }
+}
+
+// ==================== CANDLE ENGINE (Layer 2) ====================
+
+class CandleEngine extends EventEmitter {
+  constructor(markets) {
+    super();
+    this.markets = markets;
+    // { '5s': 5000, '10s': 10000, '30s': 30000, '1m': 60000 }
+    this.timeframes = { '5s': 5000, '10s': 10000, '30s': 30000, '1m': 60000 };
+    // candles[symbol][timeframe] = [{time,open,high,low,close}, ...]
+    this.history = {};
+    // current[symbol][timeframe] = {time,open,high,low,close}
+    this.current = {};
+  }
+
+  init(priceEngine) {
+    this.markets.forEach((m) => {
+      const s = m.symbol;
+      const d = getDecimals(m.basePrice);
+      const now = Date.now();
+      this.history[s] = {};
+      this.current[s] = {};
+
+      Object.entries(this.timeframes).forEach(([tf, ms]) => {
+        const bucket = Math.floor(now / ms) * ms;
+        const arr = [];
+        let p = priceEngine.getPrice(s);
+
+        // Generate 100 historical candles per timeframe
+        for (let i = 100; i >= 1; i--) {
+          const t = bucket - i * ms;
+          const o = p;
+          const ch = (Math.random() - 0.5) * 2 * m.volatility;
+          const c = fmtPrice(o + ch, d);
+          const h = fmtPrice(Math.max(o, c) + Math.random() * m.volatility * 0.3, d);
+          const l = fmtPrice(Math.min(o, c) - Math.random() * m.volatility * 0.3, d);
+          arr.push({ time: t, open: fmtPrice(o, d), high: h, low: l, close: c });
+          p = c;
+        }
+        this.history[s][tf] = arr;
+
+        // Current (in-progress) candle
+        this.current[s][tf] = {
+          time: bucket,
+          open: fmtPrice(p, d),
+          high: fmtPrice(p, d),
+          low: fmtPrice(p, d),
+          close: fmtPrice(p, d),
+        };
+      });
+    });
+    console.log('[CandleEngine] Initialized with timeframes:', Object.keys(this.timeframes).join(', '));
+  }
+
+  // Called every tick with latest prices
+  feedTick(prices, direction) {
+    const now = Date.now();
+    const closedCandles = [];
+
+    this.markets.forEach((m) => {
+      const s = m.symbol;
+      const price = prices[s];
+      if (price === undefined) return;
+      const d = getDecimals(m.basePrice);
+
+      Object.entries(this.timeframes).forEach(([tf, ms]) => {
+        const bucket = Math.floor(now / ms) * ms;
+        const cur = this.current[s][tf];
+
+        if (bucket > cur.time) {
+          // Timeframe complete → close current candle
+          const closed = {
+            time: cur.time,
+            open: cur.open,
+            high: cur.high,
+            low: cur.low,
+            close: cur.close,
+          };
+          this.history[s][tf].push(closed);
+          if (this.history[s][tf].length > 500) this.history[s][tf].shift();
+
+          closedCandles.push({ symbol: s, timeframe: tf, candle: closed });
+
+          // Start new candle
+          this.current[s][tf] = {
+            time: bucket,
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+          };
+        } else {
+          // Same bucket → update OHLC
+          if (price > cur.high) cur.high = price;
+          if (price < cur.low) cur.low = price;
+          cur.close = price;
+        }
+      });
+    });
+
+    // Emit closed candles event
+    if (closedCandles.length > 0) {
+      this.emit('candles-closed', closedCandles);
+    }
+  }
+
+  getCandles(symbol, timeframe, limit = 100) {
+    const tf = timeframe || '1m';
+    if (!this.history[symbol] || !this.history[symbol][tf]) return [];
+    const arr = this.history[symbol][tf].slice(-limit);
+    // Append current candle as rightmost
+    const live = this.current[symbol] && this.current[symbol][tf];
+    if (live && (arr.length === 0 || arr[arr.length - 1].time !== live.time)) {
+      arr.push(live);
+    }
+    return arr;
+  }
+
+  getCurrentCandle(symbol, timeframe = '1m') {
+    if (!this.current[symbol]) return null;
+    return this.current[symbol][timeframe];
+  }
+
+  getCurrentCandles(symbol) {
+    if (!this.current[symbol]) return {};
+    return { ...this.current[symbol] };
+  }
+}
+
+// ==================== WIRE UP ====================
 
 const priceEngine = new PriceEngine(MARKETS);
 const candleEngine = new CandleEngine(MARKETS);
@@ -212,16 +225,12 @@ const candleEngine = new CandleEngine(MARKETS);
 priceEngine.init();
 candleEngine.init(priceEngine);
 
-// Tick every 1 second — Price Engine drives Candle Engine
+// Tick every 1 second: Price Engine → Candle Engine
 setInterval(() => {
   priceEngine.tick();
-  // Feed all updated prices into candle engine
-  MARKETS.forEach((m) => {
-    const price = priceEngine.getPrice(m.symbol);
-    candleEngine.feedTick(m.symbol, price);
-  });
+  candleEngine.feedTick(priceEngine.getAllPrices(), priceEngine.direction);
 }, 1000);
 
-// ============ Exports ============
+// ==================== EXPORTS ====================
 
 module.exports = { MARKETS, priceEngine, candleEngine };

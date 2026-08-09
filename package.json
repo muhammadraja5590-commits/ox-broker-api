@@ -1,12 +1,12 @@
 {
   "name": "ox-broker-api",
-  "version": "2.0.0",
-  "description": "OX BROKER Demo Trading API — Centralized Price Engine + Candle Engine with WebSocket",
+  "version": "3.0.0",
+  "description": "OX BROKER — 3-Layer Live Market System: PriceEngine + CandleEngine + WebSocket",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": ["otc", "broker", "demo", "trading", "api", "websocket"],
+  "keywords": ["otc", "broker", "demo", "trading", "api", "websocket", "candles"],
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
