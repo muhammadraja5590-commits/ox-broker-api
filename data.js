@@ -1,6 +1,6 @@
 // OX BROKER — 3-Layer Live Market System
 // Layer 1: Price Engine  → 1-second ticks
-// Layer 2: Candle Engine → 5s/10s/30s/1m OHLC from same ticks
+// Layer 2: Candle Engine → 1.5s/5s/10s/30s/1m OHLC from same ticks
 // Layer 3: API + WebSocket → broadcast
 // SIMULATED OTC DEMO DATA ONLY — Not real financial market data.
 
@@ -9,7 +9,7 @@ const EventEmitter = require('events');
 // ==================== MARKET CONFIG ====================
 
 const MARKETS = [
-  { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 279.52,  highPrice: 290.0, lowPrice: 270.0,    spread: 0.0005, volatility: 0.0300 },
+  { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 289.26,  highPrice: 300.0, lowPrice: 280.0,    spread: 0.0005, volatility: 0.0300 },
   { symbol: 'GBPNZD-OTC', name: 'GBP/NZD OTC', basePrice: 1.8715,  highPrice: 1.9000, lowPrice: 1.8400,   spread: 0.00008, volatility: 0.00006 },
   { symbol: 'USDMXN-OTC', name: 'USD/MXN OTC', basePrice: 18.4205, highPrice: 18.8000, lowPrice: 18.0000, spread: 0.0005,  volatility: 0.0006 },
   { symbol: 'NZDCHF-OTC', name: 'NZD/CHF OTC', basePrice: 0.53421, highPrice: 0.5500, lowPrice: 0.5200,   spread: 0.00003, volatility: 0.00004 },
@@ -91,7 +91,7 @@ class CandleEngine extends EventEmitter {
   constructor(markets) {
     super();
     this.markets = markets;
-    this.timeframes = { '5s': 5000, '10s': 10000, '30s': 30000, '1m': 60000 };
+    this.timeframes = { '1.5s': 1500, '5s': 5000, '10s': 10000, '30s': 30000, '1m': 60000 };
     this.history = {};
     this.current = {};
   }
@@ -180,7 +180,7 @@ class CandleEngine extends EventEmitter {
   }
 
   getCandles(symbol, timeframe, limit = 100) {
-    const tf = timeframe || '1m';
+    const tf = timeframe || '1.5s';
     if (!this.history[symbol] || !this.history[symbol][tf]) return [];
     const arr = this.history[symbol][tf].slice(-limit);
     const live = this.current[symbol] && this.current[symbol][tf];
@@ -190,7 +190,7 @@ class CandleEngine extends EventEmitter {
     return arr;
   }
 
-  getCurrentCandle(symbol, timeframe = '1m') {
+  getCurrentCandle(symbol, timeframe = '1.5s') {
     if (!this.current[symbol]) return null;
     return this.current[symbol][timeframe];
   }
