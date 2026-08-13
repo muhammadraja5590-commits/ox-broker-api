@@ -9,7 +9,7 @@ const EventEmitter = require('events');
 // ==================== MARKET CONFIG ====================
 
 const MARKETS = [
-  { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 289.26,  highPrice: 300.0, lowPrice: 280.0,    spread: 0.0005, volatility: 0.0300 },
+  { symbol: 'USDPKR-OTC', name: 'USD/PKR OTC', basePrice: 289.22,  highPrice: 300.0, lowPrice: 280.0,    spread: 0.0005, volatility: 0.0300 },
   { symbol: 'GBPNZD-OTC', name: 'GBP/NZD OTC', basePrice: 1.8715,  highPrice: 1.9000, lowPrice: 1.8400,   spread: 0.00008, volatility: 0.00006 },
   { symbol: 'USDMXN-OTC', name: 'USD/MXN OTC', basePrice: 18.4205, highPrice: 18.8000, lowPrice: 18.0000, spread: 0.0005,  volatility: 0.0006 },
   { symbol: 'NZDCHF-OTC', name: 'NZD/CHF OTC', basePrice: 0.53421, highPrice: 0.5500, lowPrice: 0.5200,   spread: 0.00003, volatility: 0.00004 },
